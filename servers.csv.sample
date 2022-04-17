@@ -1,0 +1,4 @@
+NAME, IP_ADDR, USER, PASSWORD
+server1, your-ipaddr, your-username, your-password
+server2, your-ipaddr,your-username, your-password
+server3, your-ipaddr, your-username, your-password

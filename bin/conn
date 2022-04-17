@@ -1,0 +1,86 @@
+#!/usr/local/bin/bash
+
+FILEPATH="../servers.csv"
+INPUT=/tmp/menu.sh.$$
+function health() {
+  for i in `seq 3`                                                      
+  do
+    ping $1 -c 1 >> /dev/null
+    rc=$?
+    if [ $rc -eq 0 ]; then
+      return 0
+    else
+      echo "Retrying connect to $1.. ($i times)"
+    fi
+    #sleep 1
+  done
+  return 1
+}
+
+function connect() {
+  #echo "1: $1 , 2: $2"
+	expect -c "
+	set timeout 5
+	spawn env LANG=C /usr/bin/ssh $1
+	expect \"password:\"
+	send \"$2\n\"
+	interact
+	"
+}
+
+declare -A SERVER_DICT
+i=0
+while IFS=", " read name ipaddr username password; do
+  SERVER_DICT[$i,name]=${name}
+  SERVER_DICT[$i,ipaddr]=${ipaddr}
+  SERVER_DICT[$i,username]=${username}
+  SERVER_DICT[$i,password]=${password}
+  let i++
+done < ${FILEPATH}
+
+idx=$((${i}-1))
+
+display_list=
+for i in $(seq 1 ${idx}); do
+    display_list="${display_list} ${SERVER_DICT[${i},username]}@${SERVER_DICT[${i},ipaddr]} ${SERVER_DICT[${i},name]} "
+done
+
+### display main menu ###
+dialog --clear  --help-button --backtitle "SSH connection" \
+--title "[ MENU ]" \
+--menu "You can use the UP/DOWN arrow keys, the first \n\
+letter of the choice as a hot key, or the \n\
+number keys 1-9 to choose an option.\n\
+Choose the Server to connect." 20 50 ${i} \
+${display_list} \
+Exit "Exit to the shell" 2>"${INPUT}"
+
+menuitem=$(<"${INPUT}")
+selected_username=`echo $menuitem | cut -d '@' -f 1`
+selected_ipaddr=`echo $menuitem | cut -d '@' -f 2`
+
+for i in $(seq 0 ${idx}); do
+  if [ "${SERVER_DICT[${i},username]}" = "${selected_username}" \
+    -a "${SERVER_DICT[${i},ipaddr]}" = "${selected_ipaddr}" ]; then
+    
+    selected_password=${SERVER_DICT[${i},password]}
+    break
+  fi
+done
+
+clear
+if [ "$menuitem" = "Exit" ]; then
+	exit 0
+else
+  health $selected_ipaddr
+  rc=$?
+  if [ $rc -eq 0 ]; then
+  	connect $menuitem $selected_password
+	  exit 0
+  else
+    echo "Failed to connect the server!"
+    exit 1
+  fi
+fi
+
+[ -f $INPUT ] && rm $INPUT
